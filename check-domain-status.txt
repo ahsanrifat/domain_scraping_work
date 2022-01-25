@@ -1,0 +1,28 @@
+Domain scraper status:
+
+Objective is to scan domain availability based on a list of keywords. The keywords will be delivered/processed in batches, 
+the script should keep track of the domains/keywords it already checked.
+This project is simpler that the 1.3Million one as it will be a limited list of specific keywords
+
+keywords will be delived 1 per line:
+potato
+potato skin
+icecream
+food truck
+
+
+script will check the keywords as domains like this:
+
+potato
+potatoskin
+icecream
+foodtruck
+foodtruck
+
+via Simply.com we will check these domain extensions:
+			.dk    .nu  .com .net checked_on (year-month-day time)
+foodtruck    1		0	 0     0	2022-01-22  11:23:22
+potatoskin   0		1	 1     0	2022-01-22  11:24:22
+
+
+ 
