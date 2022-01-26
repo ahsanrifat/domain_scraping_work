@@ -66,23 +66,23 @@ def is_english_word(s):
     except UnicodeDecodeError:
         pass
     else:
-        return s
+        return s.replace(" ", "")
 
 
 def prepare_keyword_list(df: DataFrame):
     try:
         df.columns = map(str.lower, df.columns)
         keywords = list(df.keyword)
+        # taking the only english words and making set to erase duplicates
         keywords_set = set(map(is_english_word, keywords))
         if None in keywords_set:
             keywords_set.remove(None)
-        keywords_list = list(keywords_set)
-        keywords_list = [word.replace(" ", "") for word in keywords_list]
-        keywords_set = set(keywords_list)
+        # if exclusion of already checked keywords is needed
         if scrap_config.exclude_done_keywords:
             keywords_list = exclude_checked_keywords(keywords_set)
         else:
             keywords_list = list(keywords_set)
+        # making lists of list of keywords (each list will contain {num_of_lists} number of keywords)
         num_of_lists = 20
         lists_of_keywords = [
             keywords_list[x : x + num_of_lists]
@@ -137,3 +137,11 @@ if __name__ == "__main__":
         "google_dk__all-keywords_2022-01-23_11-32-06-2.csv", encoding="latin1"
     )
     lists_of_keywords = prepare_keyword_list(df)
+    print("Number of list in lists_of_keyword-->", len(lists_of_keywords))
+    if len(lists_of_keywords) > 0:
+        t0 = time.time()
+        print("Starting Threads to get domain information")
+        with futures.ThreadPoolExecutor() as executor:  # default/optimized number of threads
+            titles = list(executor.map(check_domain_availability, lists_of_keywords))
+            save_result()
+        print("Time Taken-->", (time.time() - t0) / 60, "MIN")
