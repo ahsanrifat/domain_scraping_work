@@ -3,3 +3,5 @@
 keyword_file_path = r"google_dk__all-keywords_2022-01-23_11-32-06-2.csv"
 done_keywords_csv_path = r"done_keywords.csv"
 domain_extentions = ["nu", "com", "net", "dk"]
+keep_record_of_keywords = True
+exclude_done_keywords = True
