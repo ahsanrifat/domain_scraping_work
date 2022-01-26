@@ -40,7 +40,7 @@ def save_result():
     try:
         final_df = DataFrame(result_list)
         date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        file_name = f"report_{date}"
+        file_name = fr"reports/report_{date}"
         final_df.to_csv(f"{file_name}.csv", index=False)
         if scrap_config.keep_record_of_keywords:
             update_done_keyword_csv(final_df)
@@ -133,9 +133,7 @@ def check_domain_availability(keywords_list):
 
 
 if __name__ == "__main__":
-    df = read_csv(
-        "google_dk__all-keywords_2022-01-23_11-32-06-2.csv", encoding="latin1"
-    )
+    df = read_csv(scrap_config.keyword_file_path, encoding="latin1")
     lists_of_keywords = prepare_keyword_list(df)
     print("Number of list in lists_of_keyword-->", len(lists_of_keywords))
     if len(lists_of_keywords) > 0:
@@ -144,4 +142,4 @@ if __name__ == "__main__":
         with futures.ThreadPoolExecutor() as executor:  # default/optimized number of threads
             titles = list(executor.map(check_domain_availability, lists_of_keywords))
             save_result()
-        print("Time Taken-->", (time.time() - t0) / 60, "MIN")
+        print("Time Taken-->", (time.time() - t0) / 60, "MINUTES")

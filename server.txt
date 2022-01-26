@@ -1,0 +1,4 @@
+IP: 144.91.121.108	
+user: Administrator
+pass: new: vPNoVE3hT0O0RXjX
+rdesktop -u Administrator -f 144.91.121.108
