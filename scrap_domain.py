@@ -1,13 +1,52 @@
-from bs4 import BeautifulSoup
-from selenium.webdriver import Chrome
-from selenium.webdriver.common.keys import Keys
 import time
 from datetime import datetime
 from concurrent import futures
-from pandas import DataFrame, read_csv, concat
+from pandas import DataFrame, read_csv, concat, merge
 import scrap_config
+import os
+import requests
+import logging
 
 result_list = []
+
+
+def initiate_log():
+    try:
+        if os.path.isdir("log") == False:
+            os.makedirs("log")
+        LOG_FILENAME = datetime.now().strftime("./log/%d-%m-%Y.log")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            filename=LOG_FILENAME,
+            format="%(asctime)s %(levelname)s:%(message)s",
+        )
+        if os.path.isfile(LOG_FILENAME) != True:
+            logging.FileHandler(LOG_FILENAME, mode="w", encoding=None, delay=False)
+    except Exception as e:
+        print(f"Exception-(initiate_log)->{e}")
+
+
+def handle_log(exception_data, method_name, *args):
+    initiate_log()
+    date_time = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    logging.exception(f"======Exception Start-->{date_time}============")
+    logging.exception(f"Exception occurred! Method : {method_name}")
+    logging.exception(f"Exception-->{exception_data}")
+    if args:
+        for data in args:
+            logging.exception(f"Exception args-->{data}")
+    logging.exception(f"===========END============")
+
+
+def read_csv_from_path(path):
+    try:
+        # if the csv file is empty then return empty dataframe object
+        if os.stat(rf"{path}").st_size == 0:
+            return DataFrame()
+        return read_csv(rf"{path}")
+    except Exception as e:
+        print("Exception in (exclude_checked_keywords)-->", e)
+        handle_log(e, "exclude_checked_keywords")
 
 
 def exclude_checked_keywords(new_keywords_set):
@@ -23,41 +62,35 @@ def exclude_checked_keywords(new_keywords_set):
         return remaining_keywords_list
     except Exception as e:
         print("Exception in (exclude_checked_keywords)-->", e)
+        handle_log(e, "new_keywords_set")
 
 
 def update_done_keyword_csv(df: DataFrame):
     try:
         df = df[["keyword", "checking_date"]]
-        base_df = read_csv(scrap_config.done_keywords_csv_path)
+        base_df = read_csv_from_path(scrap_config.done_keywords_csv_path)
         base_df = concat([base_df, df])
         base_df = base_df.drop_duplicates(subset=["keyword"])
         base_df.to_csv(scrap_config.done_keywords_csv_path, index=False)
     except Exception as e:
         print("Exception in (update_done_keyword_csv)-->", e)
+        handle_log(e, "update_done_keyword_csv")
 
 
-def save_result():
+def save_result(source_df):
     try:
         final_df = DataFrame(result_list)
-        date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        file_name = fr"reports/report_{date}"
-        final_df.to_csv(f"{file_name}.csv", index=False)
+        source_df.columns = map(str.lower, source_df.columns)
+        source_df.keyword = [x.replace(" ", "") for x in source_df.keyword]
+        final_df = merge(source_df, final_df, on=["keyword"], how="inner")
+        file_path_report=scrap_config.keyword_file_path
+        file_path_report=file_path_report.replace(".csv","_Report")
+        final_df.to_csv(rf"{file_path_report}.csv", index=False)
         if scrap_config.keep_record_of_keywords:
             update_done_keyword_csv(final_df)
     except Exception as e:
         print("Exception in (save_result)-->", e)
-
-
-def get_driver():
-    try:
-        url = "https://www.simply.com/en/"
-        driver = Chrome(
-            executable_path=r"/home/rifat/Documents/interview/domain_scraping/driver/chromedriver"
-        )
-        driver.get(url)
-        return driver
-    except Exception as e:
-        print("Exception in (get_driver)-->", e)
+        handle_log(e, "save_result")
 
 
 def is_english_word(s):
@@ -66,7 +99,9 @@ def is_english_word(s):
     except UnicodeDecodeError:
         pass
     else:
-        return s.replace(" ", "")
+        s = s.replace(" ", "")
+        if not any(not c.isalnum() for c in s):
+            return s
 
 
 def prepare_keyword_list(df: DataFrame):
@@ -88,58 +123,61 @@ def prepare_keyword_list(df: DataFrame):
             keywords_list[x : x + num_of_lists]
             for x in range(0, len(keywords_list), num_of_lists)
         ]
-        return lists_of_keywords
+        return keywords_list
     except Exception as e:
         print("Exception in (prepare_keyword_list)-->", e)
+        handle_log(e, "prepare_keyword_list")
 
 
-def check_domain_availability(keywords_list):
+def check_domain_availability_api(keywords_list):
     try:
         global domain_extentions
         global result_list
-        driver = get_driver()
-        is_first_load = False
-        for keyword in keywords_list:
-            result_dict = {"keyword": keyword}
-            for extention in scrap_config.domain_extentions:
-                try:
-                    full_domain = f"{keyword}.{extention}"
-                    inputElement = driver.find_element_by_class_name("form-control")
-                    if not is_first_load:
-                        inputElement.send_keys(Keys.CONTROL + "a")
-                        inputElement.send_keys(Keys.DELETE)
-                    is_first_load = False
-                    inputElement.send_keys(full_domain)
-                    inputElement.send_keys(Keys.ENTER)
-                    time.sleep(0.6)
-                    elements = driver.find_elements_by_class_name("text-success")
-                    text = elements[0].text
-                    if "The domain you searched for is available!" in text:
-                        result_dict[extention] = 1
-                        # print(full_domain,"-->Domain Available")
-                    else:
-                        result_dict[extention] = 0
-                        # print(full_domain,"-->Domain not available")
-
-                    del elements
-                except Exception as e:
-                    result_dict[extention] = str(e)
-                    print("Exception-->", e)
-            result_dict["checking_date"] = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-            result_list.append(result_dict)
-        driver.quit()
+        # for keyword in keywords_list:
+        keyword = keywords_list
+        result_dict = {"keyword": keyword}
+        for extention in scrap_config.domain_extentions:
+            try:
+                full_domain = f"{keyword}.{extention}"
+                url = f"https://api.simply.com/2/my/domaincheck/{full_domain}"
+                response = requests.get(
+                    url,
+                    auth=(scrap_config.api_name, scrap_config.api_key),
+                )
+                if response.json()["domain"]["status"] == "taken":
+                    result_dict[extention] = scrap_config.taken_status
+                elif response.json()["domain"]["status"] == "available":
+                    result_dict[extention] = scrap_config.available_status
+                else:
+                    result_dict[extention] = scrap_config.unknown_status
+                print(full_domain, "---> Status: ", response.json()["domain"]["status"]," Code: ",result_dict[extention])
+            except Exception as e:
+                result_dict[extention] = scrap_config.exception_status
+                handle_log(e, "check_domain_availability_api_loop(extentions)", url)
+                print("===Exception in (check_domain_availability_api) loop-->", e)
+                print("URL--->", url)
+                print("===================")
+        result_dict["checking_date"] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        result_list.append(result_dict)
     except Exception as e:
-        print("Exception in (check_domain_availability)-->", e)
+        print("Exception in (check_domain_availability_api)-->", e)
+        handle_log(e, "check_domain_availability_api")
 
 
 if __name__ == "__main__":
-    df = read_csv(scrap_config.keyword_file_path, encoding="latin1")
-    lists_of_keywords = prepare_keyword_list(df)
-    print("Number of list in lists_of_keyword-->", len(lists_of_keywords))
-    if len(lists_of_keywords) > 0:
-        t0 = time.time()
-        print("Starting Threads to get domain information")
-        with futures.ThreadPoolExecutor() as executor:  # default/optimized number of threads
-            titles = list(executor.map(check_domain_availability, lists_of_keywords))
-            save_result()
-        print("Time Taken-->", (time.time() - t0) / 60, "MINUTES")
+    try:
+        df = read_csv(scrap_config.keyword_file_path, encoding="latin1")
+        list_of_keywords = prepare_keyword_list(df)
+        print("Number of list in lists_of_keyword-->", len(list_of_keywords))
+        if len(list_of_keywords) > 0:
+            t0 = time.time()
+            print("Starting Threads to get domain information")
+            with futures.ThreadPoolExecutor() as executor:  # default/optimized number of threads
+                titles = list(
+                    executor.map(check_domain_availability_api, list_of_keywords)
+                )
+                save_result(df)
+            print("Time Taken-->", (time.time() - t0) / 60, "MINUTES")
+    except Exception as e:
+        print("Exception in (__main__)-->", e)
+        handle_log(e, "__main__")
