@@ -4,3 +4,5 @@ __pycache__
 reports
 log
 done_keywords.csv
+secret_keys.py
+server.txt
